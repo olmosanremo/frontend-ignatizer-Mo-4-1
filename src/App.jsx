@@ -21,7 +21,35 @@ const App = () => {
     const [isPlaying, setIsPlaying] = useState(false);
     const canvasRef = useRef(null);
 
-    const polySynth = useRef(new Tone.PolySynth(Tone.Synth, { maxPolyphony: 3 }).toDestination());
+    const polySynth = useRef(new Tone.PolySynth(Tone.Synth, {
+        maxPolyphony: 12,
+        options: {
+            oscillator: {
+                type: 'sine' // Verwenden Sie einen Sägezahn-Oszillator
+            },
+            envelope: {
+                attack: 0.05,
+                decay: 0.2,
+                sustain: 0.7,
+                release: 2
+            },
+            filter: {
+                Q: 2,
+                type: 'lowpass',
+                frequency: 400,
+                rolloff: -24
+            },
+            filterEnvelope: {
+                attack: 0.9,
+                decay: 0.7,
+                sustain: 0.2,
+                release: 1.9,
+                baseFrequency: 300,
+                octaves: 4,
+                exponent: 2
+            }
+        }
+    }).toDestination());
 
     const toggleEraseMode = () => {
         setIsErasing(!isErasing);
@@ -131,7 +159,7 @@ const App = () => {
             lines[color].forEach((line, lineIndex) => {
                 line.points.forEach((point, pointIndex, arr) => {
                     let time = (point.x / canvasRef.current.width) * totalTime;
-                    const freq = 100 + (canvasRef.current.height - point.y);
+                    const baseFreq = 100 + (canvasRef.current.height - point.y);
                     const nextTime = (pointIndex < arr.length - 1) ? (arr[pointIndex + 1].x / canvasRef.current.width) * totalTime : time + 0.5;
                     const duration = Math.max(nextTime - time, minDuration);
 
@@ -140,15 +168,25 @@ const App = () => {
                     }
                     lastScheduledTime[color] = time;
 
-                    console.log(`Scheduling note: color=${color}, line=${lineIndex}, point=${pointIndex}, freq=${freq}, time=${time}, duration=${duration}`);
+                    console.log(`Scheduling note: color=${color}, line=${lineIndex}, point=${pointIndex}, freq=${baseFreq}, time=${time}, duration=${duration}`);
 
-                    Tone.Transport.schedule((t) => {
-                        polySynth.current.triggerAttackRelease(freq, duration, t, 0.5 + index / colors.length);
-                    }, time);
+                    if (color === 'green') {
+                        // Trigger 5 slightly detuned voices for green color
+                        const detuneValues = [-10, -5, 0, 17, 33];
+                        detuneValues.forEach((detune, i) => {
+                            Tone.Transport.schedule((t) => {
+                                polySynth.current.triggerAttackRelease(baseFreq + detune, duration, t);
+                            }, time + i * 0.01); // Slight delay between each voice
+                        });
+                    } else {
+                        Tone.Transport.schedule((t) => {
+                            polySynth.current.triggerAttackRelease(baseFreq, duration, t);
+                        }, time);
+                    }
 
                     if (pointIndex === arr.length - 1) {
                         Tone.Transport.scheduleOnce((t) => {
-                            polySynth.current.triggerRelease([freq], t);
+                            polySynth.current.triggerRelease([baseFreq], t);
                             console.log(`Released: color=${color}, line=${lineIndex}, point=${pointIndex}, time=${t}`);
                         }, time + duration);
                     }
@@ -212,3 +250,5 @@ const App = () => {
 };
 
 export default App;
+
+
