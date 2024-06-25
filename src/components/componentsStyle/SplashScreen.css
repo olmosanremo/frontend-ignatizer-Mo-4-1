@@ -1,0 +1,25 @@
+/* src/componentsStyle/SplashScreen.css */
+.splash-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #282c34;
+    color: white;
+    font-size: 24px;
+    z-index: 1000;
+    animation: fadeOut 2s forwards; /* 2 Sekunden Animation */
+}
+
+@keyframes fadeOut {
+    0% {
+        opacity: 1;
+    }
+    100% {
+        opacity: 0;
+    }
+}
