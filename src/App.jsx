@@ -1,3 +1,4 @@
+// eslint-disable-next-line no-unused-vars
 import React, { useState, useEffect, useRef } from 'react';
 import MinimalDrawingCanvas from './components/MinimalDrawingCanvas';
 import ControlPanel from './components/ControlPanel';
