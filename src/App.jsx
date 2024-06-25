@@ -1,11 +1,13 @@
-// eslint-disable-next-line no-unused-vars
+// App.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import MinimalDrawingCanvas from './components/MinimalDrawingCanvas';
 import ControlPanel from './components/ControlPanel';
 import DrawingList from './components/DrawingList';
-import SplashScreen from './components/SplashScreen'; // Korrigierter Importpfad
+import SplashScreen from './components/SplashScreen';
+import SoundControls from './components/SoundControls';
+import * as Tone from 'tone';
 import { saveDrawing, loadDrawing, updateDrawing, getAllDrawings, deleteDrawing } from './backendApi/api';
-import './App.css'; // Importiere die CSS-Datei
+import './App.css';
 
 const App = () => {
     const [lines, setLines] = useState({ red: [], yellow: [], green: [] });
@@ -15,7 +17,8 @@ const App = () => {
     const [originalTrackName, setOriginalTrackName] = useState('');
     const [drawings, setDrawings] = useState([]);
     const [isDrawingListVisible, setIsDrawingListVisible] = useState(false);
-    const [showSplash, setShowSplash] = useState(true); // Zustand für den SplashScreen
+    const [showSplash, setShowSplash] = useState(true);
+    const [isPlaying, setIsPlaying] = useState(false);
     const canvasRef = useRef(null);
 
     const toggleEraseMode = () => {
@@ -25,7 +28,7 @@ const App = () => {
     useEffect(() => {
         const timer = setTimeout(() => {
             setShowSplash(false);
-        }, 2000); // SplashScreen nach 2 Sekunden ausblenden
+        }, 2000);
 
         return () => clearTimeout(timer);
     }, []);
@@ -45,7 +48,7 @@ const App = () => {
                 setOriginalTrackName(trackName);
                 alert('Drawing saved!');
             }
-            handleFetchDrawings(); // Aktualisiere die Liste nach dem Speichern
+            handleFetchDrawings();
         } catch (error) {
             alert('Error saving drawing.');
         }
@@ -58,8 +61,8 @@ const App = () => {
                 setLines(drawing.lines);
                 setTrackName(drawing.name);
                 setOriginalTrackName(drawing.name);
-                setIsDrawingListVisible(false); // Schließe das Fenster nach dem Laden
-                handleFetchDrawings(); // Aktualisiere die Liste nach dem Laden
+                setIsDrawingListVisible(false);
+                handleFetchDrawings();
             } else {
                 alert('Drawing not found!');
             }
@@ -87,7 +90,7 @@ const App = () => {
         try {
             await deleteDrawing(id);
             alert('Drawing deleted!');
-            handleFetchDrawings(); // Aktualisiere die Liste nach dem Löschen
+            handleFetchDrawings();
         } catch (error) {
             alert('Error deleting drawing.');
         }
@@ -97,15 +100,92 @@ const App = () => {
         setLines({ red: [], yellow: [], green: [] });
     };
 
+    const playPauseSound = () => {
+        if (isPlaying) {
+            Tone.Transport.pause();
+        } else {
+            if (Tone.Transport.state === 'stopped') {
+                Tone.Transport.cancel();
+                Tone.Transport.position = 0;
+                scheduleSounds();
+            }
+            Tone.Transport.start();
+        }
+        setIsPlaying(!isPlaying);
+    };
+
+    const scheduleSounds = () => {
+        const synths = {
+            red: new Tone.Synth().toDestination(),
+            yellow: new Tone.MembraneSynth().toDestination(),
+            green: new Tone.FMSynth().toDestination()
+        };
+
+        const totalTime = 30;
+        const minDuration = 0.05;
+        let lastScheduledTime = {
+            red: 0,
+            yellow: 0,
+            green: 0
+        };
+
+        Object.keys(lines).forEach(color => {
+            lines[color].forEach((line, lineIndex) => {
+                line.points.forEach((point, index, arr) => {
+                    let time = (point.x / canvasRef.current.width) * totalTime;
+                    const freq = 100 + (canvasRef.current.height - point.y);
+                    const nextTime = (index < arr.length - 1) ? (arr[index + 1].x / canvasRef.current.width) * totalTime : time + 0.5;
+                    const duration = Math.max(nextTime - time, minDuration);
+
+                    const synth = synths[color];
+
+                    if (time <= lastScheduledTime[color]) {
+                        time = lastScheduledTime[color] + minDuration;
+                    }
+                    lastScheduledTime[color] = time;
+
+                    console.log(`Scheduling note: color=${color}, line=${lineIndex}, point=${index}, freq=${freq}, time=${time}, duration=${duration}`);
+
+                    Tone.Transport.schedule((t) => {
+                        synth.triggerAttackRelease(freq, duration, t);
+                    }, time);
+
+                    if (index === arr.length - 1) {
+                        console.log(`Scheduling release at end of line: color=${color}, line=${lineIndex}, point=${index}, time=${time + duration}`);
+                        Tone.Transport.scheduleOnce((t) => {
+                            synth.triggerRelease(t);
+                            console.log(`Released: color=${color}, line=${lineIndex}, point=${index}, time=${t}`);
+                        }, time + duration);
+                    }
+
+                    if (lineIndex === lines[color].length - 1 && index === arr.length - 1) {
+                        Tone.Transport.scheduleOnce((t) => {
+                            synth.triggerRelease(t);
+                            console.log(`Released last note: color=${color}, line=${lineIndex}, point=${index}, time=${t}`);
+                        }, time + duration);
+                    }
+                });
+            });
+        });
+
+        Tone.Transport.start();
+    };
+
+    const stopSound = () => {
+        Tone.Transport.stop();
+        setIsPlaying(false);
+    };
+
     useEffect(() => {
         handleFetchDrawings();
     }, []);
 
     return (
         <div>
-            {showSplash && <SplashScreen />} {/* SplashScreen anzeigen */}
+            {showSplash && <SplashScreen />}
             {!showSplash && (
                 <>
+                    <div className="control-head">
                     <button onClick={() => setIsDrawingListVisible(true)}>Logo Button</button>
                     {isDrawingListVisible && (
                         <div className="modal">
@@ -119,18 +199,25 @@ const App = () => {
                             </div>
                         </div>
                     )}
+                    <SoundControls
+                        isPlaying={isPlaying}
+                        playPauseSound={playPauseSound}
+                        stopSound={stopSound}
+                    />
+                    </div>
                     <ControlPanel setColor={setColor} toggleEraseMode={toggleEraseMode} isErasing={isErasing} />
-                    <input
-                        type="text"
-                        value={trackName}
-                        onChange={(e) => setTrackName(e.target.value)}
-                        placeholder="Enter track name"
+                    <input className="name-input-field"
+                           type="text"
+                           value={trackName}
+                           onChange={(e) => setTrackName(e.target.value)}
+                           placeholder="Enter track name"
                     />
                     <MinimalDrawingCanvas canvasRef={canvasRef} lines={lines} setLines={setLines} color={color} isErasing={isErasing} />
                     <div>
                         <button onClick={handleSave}>Save Drawing</button>
                         <button onClick={clearDrawing}>Clear Drawing</button>
                     </div>
+
                 </>
             )}
         </div>

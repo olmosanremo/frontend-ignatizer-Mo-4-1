@@ -1,11 +1,9 @@
-
+// MinimalDrawingCanvas.jsx
 import React, { useEffect, useState } from 'react';
-import * as Tone from 'tone';
 
 const MinimalDrawingCanvas = ({ canvasRef, lines, setLines, color, isErasing }) => {
     const [isDrawing, setIsDrawing] = useState(false);
     const [currentLine, setCurrentLine] = useState([]);
-    const [isPlaying, setIsPlaying] = useState(false);
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -104,83 +102,6 @@ const MinimalDrawingCanvas = ({ canvasRef, lines, setLines, color, isErasing }) 
         return { x, y };
     };
 
-    const playPauseSound = () => {
-        if (isPlaying) {
-            Tone.Transport.pause();
-        } else {
-            if (Tone.Transport.state === 'stopped') {
-                Tone.Transport.cancel();
-                Tone.Transport.position = 0;
-                scheduleSounds();
-            }
-            Tone.Transport.start();
-        }
-        setIsPlaying(!isPlaying);
-    };
-
-    const scheduleSounds = () => {
-        const synths = {
-            red: new Tone.Synth().toDestination(),
-            yellow: new Tone.MembraneSynth().toDestination(),
-            green: new Tone.FMSynth().toDestination()
-        };
-
-        const totalTime = 30;
-        const minDuration = 0.05;
-        let lastScheduledTime = {
-            red: 0,
-            yellow: 0,
-            green: 0
-        };
-
-        Object.keys(lines).forEach(color => {
-            lines[color].forEach((line, lineIndex) => {
-                line.points.forEach((point, index, arr) => {
-                    let time = (point.x / canvasRef.current.width) * totalTime;
-                    const freq = 100 + (canvasRef.current.height - point.y);
-                    const nextTime = (index < arr.length - 1) ? (arr[index + 1].x / canvasRef.current.width) * totalTime : time + 0.5;
-                    const duration = Math.max(nextTime - time, minDuration);
-
-                    const synth = synths[color];
-
-                    if (time <= lastScheduledTime[color]) {
-                        time = lastScheduledTime[color] + minDuration;
-                    }
-                    lastScheduledTime[color] = time;
-
-                    console.log(`Scheduling note: color=${color}, line=${lineIndex}, point=${index}, freq=${freq}, time=${time}, duration=${duration}`);
-
-                    Tone.Transport.schedule((t) => {
-                        synth.triggerAttackRelease(freq, duration, t);
-                    }, time);
-
-                    if (index === arr.length - 1) {
-                        console.log(`Scheduling release at end of line: color=${color}, line=${lineIndex}, point=${index}, time=${time + duration}`);
-                        Tone.Transport.scheduleOnce((t) => {
-                            synth.triggerRelease(t);
-                            console.log(`Released: color=${color}, line=${lineIndex}, point=${index}, time=${t}`);
-                        }, time + duration);
-                    }
-
-                    // Ensure the synth is released after the last point of the last line
-                    if (lineIndex === lines[color].length - 1 && index === arr.length - 1) {
-                        Tone.Transport.scheduleOnce((t) => {
-                            synth.triggerRelease(t);
-                            console.log(`Released last note: color=${color}, line=${lineIndex}, point=${index}, time=${t}`);
-                        }, time + duration);
-                    }
-                });
-            });
-        });
-
-        Tone.Transport.start();
-    };
-
-    const stopSound = () => {
-        Tone.Transport.stop();
-        setIsPlaying(false);
-    };
-
     return (
         <div>
             <canvas
@@ -192,11 +113,8 @@ const MinimalDrawingCanvas = ({ canvasRef, lines, setLines, color, isErasing }) 
                 onMouseUp={endDrawing}
                 onMouseMove={draw}
             />
-            <button onClick={playPauseSound}>{isPlaying ? "Pause Sound" : "Play Sound"}</button>
-            <button onClick={stopSound}>Stop Sound</button>
         </div>
     );
 };
 
 export default MinimalDrawingCanvas;
-
