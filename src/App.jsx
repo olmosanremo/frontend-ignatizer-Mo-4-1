@@ -21,6 +21,8 @@ const App = () => {
     const [isPlaying, setIsPlaying] = useState(false);
     const canvasRef = useRef(null);
 
+    const polySynth = useRef(new Tone.PolySynth(Tone.Synth, { maxPolyphony: 3 }).toDestination());
+
     const toggleEraseMode = () => {
         setIsErasing(!isErasing);
     };
@@ -115,53 +117,39 @@ const App = () => {
     };
 
     const scheduleSounds = () => {
-        const synths = {
-            red: new Tone.Synth().toDestination(),
-            yellow: new Tone.MembraneSynth().toDestination(),
-            green: new Tone.FMSynth().toDestination()
-        };
-
+        const colors = ['red', 'yellow', 'green'];
         const totalTime = 30;
         const minDuration = 0.05;
+
         let lastScheduledTime = {
             red: 0,
             yellow: 0,
             green: 0
         };
 
-        Object.keys(lines).forEach(color => {
+        colors.forEach((color, index) => {
             lines[color].forEach((line, lineIndex) => {
-                line.points.forEach((point, index, arr) => {
+                line.points.forEach((point, pointIndex, arr) => {
                     let time = (point.x / canvasRef.current.width) * totalTime;
                     const freq = 100 + (canvasRef.current.height - point.y);
-                    const nextTime = (index < arr.length - 1) ? (arr[index + 1].x / canvasRef.current.width) * totalTime : time + 0.5;
+                    const nextTime = (pointIndex < arr.length - 1) ? (arr[pointIndex + 1].x / canvasRef.current.width) * totalTime : time + 0.5;
                     const duration = Math.max(nextTime - time, minDuration);
-
-                    const synth = synths[color];
 
                     if (time <= lastScheduledTime[color]) {
                         time = lastScheduledTime[color] + minDuration;
                     }
                     lastScheduledTime[color] = time;
 
-                    console.log(`Scheduling note: color=${color}, line=${lineIndex}, point=${index}, freq=${freq}, time=${time}, duration=${duration}`);
+                    console.log(`Scheduling note: color=${color}, line=${lineIndex}, point=${pointIndex}, freq=${freq}, time=${time}, duration=${duration}`);
 
                     Tone.Transport.schedule((t) => {
-                        synth.triggerAttackRelease(freq, duration, t);
+                        polySynth.current.triggerAttackRelease(freq, duration, t, 0.5 + index / colors.length);
                     }, time);
 
-                    if (index === arr.length - 1) {
-                        console.log(`Scheduling release at end of line: color=${color}, line=${lineIndex}, point=${index}, time=${time + duration}`);
+                    if (pointIndex === arr.length - 1) {
                         Tone.Transport.scheduleOnce((t) => {
-                            synth.triggerRelease(t);
-                            console.log(`Released: color=${color}, line=${lineIndex}, point=${index}, time=${t}`);
-                        }, time + duration);
-                    }
-
-                    if (lineIndex === lines[color].length - 1 && index === arr.length - 1) {
-                        Tone.Transport.scheduleOnce((t) => {
-                            synth.triggerRelease(t);
-                            console.log(`Released last note: color=${color}, line=${lineIndex}, point=${index}, time=${t}`);
+                            polySynth.current.triggerRelease([freq], t);
+                            console.log(`Released: color=${color}, line=${lineIndex}, point=${pointIndex}, time=${t}`);
                         }, time + duration);
                     }
                 });
@@ -186,24 +174,24 @@ const App = () => {
             {!showSplash && (
                 <>
                     <div className="control-head">
-                    <button onClick={() => setIsDrawingListVisible(true)}>Logo Button</button>
-                    {isDrawingListVisible && (
-                        <div className="modal">
-                            <div className="modal-content">
-                                <DrawingList
-                                    drawings={drawings}
-                                    onLoad={handleLoad}
-                                    onDelete={handleDelete}
-                                />
-                                <button onClick={() => setIsDrawingListVisible(false)}>Close</button>
+                        <button onClick={() => setIsDrawingListVisible(true)}>Logo Button</button>
+                        {isDrawingListVisible && (
+                            <div className="modal">
+                                <div className="modal-content">
+                                    <DrawingList
+                                        drawings={drawings}
+                                        onLoad={handleLoad}
+                                        onDelete={handleDelete}
+                                    />
+                                    <button onClick={() => setIsDrawingListVisible(false)}>Close</button>
+                                </div>
                             </div>
-                        </div>
-                    )}
-                    <SoundControls
-                        isPlaying={isPlaying}
-                        playPauseSound={playPauseSound}
-                        stopSound={stopSound}
-                    />
+                        )}
+                        <SoundControls
+                            isPlaying={isPlaying}
+                            playPauseSound={playPauseSound}
+                            stopSound={stopSound}
+                        />
                     </div>
                     <ControlPanel setColor={setColor} toggleEraseMode={toggleEraseMode} isErasing={isErasing} />
                     <input className="name-input-field"
@@ -217,7 +205,6 @@ const App = () => {
                         <button onClick={handleSave}>Save Drawing</button>
                         <button onClick={clearDrawing}>Clear Drawing</button>
                     </div>
-
                 </>
             )}
         </div>
